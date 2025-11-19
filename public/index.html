@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>2인용 주사위 게임</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      max-width: 600px;
+      margin: 40px auto;
+      text-align: center;
+    }
+    #playerList {
+      margin: 10px 0;
+    }
+    #log {
+      margin-top: 20px;
+      text-align: left;
+      border: 1px solid #ccc;
+      padding: 10px;
+      height: 200px;
+      overflow-y: auto;
+      font-size: 14px;
+      background: #fafafa;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>2인용 온라인 주사위 게임</h1>
+
+  <p id="myInfo">내 정보: 연결 중...</p>
+  <p id="turnInfo">현재 턴: -</p>
+  <p id="lastRoll">마지막 주사위: -</p>
+
+  <button id="rollBtn" disabled>주사위 굴리기</button>
+
+  <h3>플레이어 목록</h3>
+  <div id="playerList"></div>
+
+  <h3>기록</h3>
+  <div id="log"></div>
+
+  <!-- socket.io 클라이언트 스크립트 -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="client.js"></script>
+</body>
+</html>
