@@ -5,6 +5,7 @@ const profileScreen = document.getElementById('profile-screen');
 const gameScreen = document.getElementById('game-screen');
 
 const nicknameInput = document.getElementById('nickname-input');
+const colorSelect = document.getElementById('color-select');
 const avatarDrop = document.getElementById('avatar-drop');
 const avatarInput = document.getElementById('avatar-input');
 const avatarDropText = document.getElementById('avatar-drop-text');
@@ -14,14 +15,15 @@ const roundNumberSpan = document.getElementById('round-number');
 const opponentNameSpan = document.getElementById('opponent-name');
 const opponentMoneySpan = document.getElementById('opponent-money');
 const opponentAvatarImg = document.getElementById('opponent-avatar');
+const opponentDiceRow = document.getElementById('opponent-dice-row');
 
 const myNameSpan = document.getElementById('my-name');
 const myMoneySpan = document.getElementById('my-money');
 const myAvatarImg = document.getElementById('my-avatar');
+const myDiceRow = document.getElementById('my-dice-row');
 
 const turnIndicator = document.getElementById('turn-indicator');
 const rolledDiceRow = document.getElementById('rolled-dice-row');
-const myDiceRow = document.getElementById('my-dice-row');
 const rollBtn = document.getElementById('roll-btn');
 const startGameBtn = document.getElementById('start-game-btn');
 const choiceRow = document.getElementById('choice-row');
@@ -33,6 +35,7 @@ let myId = null;
 let myProfile = {
   name: '',
   avatar: null,
+  color: 'red',
 };
 let players = [];
 let currentTurnId = null;
@@ -55,6 +58,7 @@ function createDie(value, cssClass) {
   return div;
 }
 
+// 굴린 주사위 표시
 function renderDiceRow(container, dice, whose) {
   container.innerHTML = '';
   dice.forEach((d) => {
@@ -82,11 +86,16 @@ function setupCasinosEmpty() {
 
     header.appendChild(die);
 
+    const summary = document.createElement('div');
+    summary.className = 'casino-dice-summary';
+    summary.id = `casino-dice-${i}`;
+
     const moneyList = document.createElement('div');
     moneyList.className = 'casino-money-list';
     moneyList.id = `casino-money-${i}`;
 
     casino.appendChild(header);
+    casino.appendChild(summary);
     casino.appendChild(moneyList);
     casinoRow.appendChild(casino);
   }
@@ -105,7 +114,6 @@ function animateRoundSetup(payload) {
   casinos.forEach((c) => {
     const moneyList = document.getElementById(`casino-money-${c.index}`);
     if (!moneyList) return;
-    let sum = 0;
     c.banknotes.forEach((note) => {
       setTimeout(() => {
         const div = document.createElement('div');
@@ -113,10 +121,63 @@ function animateRoundSetup(payload) {
         div.textContent = note.toLocaleString() + ' $';
         moneyList.appendChild(div);
       }, delay);
-      sum += note;
       delay += stepDelay;
     });
   });
+}
+
+// 카지노 위에 실제 주사위 개수 요약 표시
+function updateCasinoDiceSummaries(casinosState) {
+  if (!casinosState) return;
+  casinosState.forEach((c) => {
+    const el = document.getElementById(`casino-dice-${c.index}`);
+    if (!el) return;
+    el.innerHTML = '';
+
+    // 플레이어별
+    players.forEach((p) => {
+      const count = c.diceByPlayer?.[p.id] || 0;
+      if (count > 0) {
+        const line = document.createElement('div');
+        const label = p.id === myId ? '나' : (p.name || `P${p.index}`);
+        line.textContent = `${label}: ${count}`;
+        el.appendChild(line);
+      }
+    });
+
+    // 중립
+    if (c.neutralCount > 0) {
+      const line = document.createElement('div');
+      line.textContent = `N: ${c.neutralCount}`;
+      el.appendChild(line);
+    }
+  });
+}
+
+// 남은 주사위 개수를 내/상대 프사 옆에 표시
+function updateRemainingDiceUI() {
+  const me = players.find((p) => p.id === myId);
+  const opp = players.find((p) => p.id !== myId);
+
+  myDiceRow.innerHTML = '';
+  opponentDiceRow.innerHTML = '';
+
+  if (!me || !opp) return;
+
+  const myRemain = (me.diceColorLeft ?? 0) + (me.diceNeutralLeft ?? 0);
+  const oppRemain = (opp.diceColorLeft ?? 0) + (opp.diceNeutralLeft ?? 0);
+
+  // 내 턴이면 → 상대 프사 옆에 상대 남은 주사위 표시
+  if (currentTurnId === myId) {
+    for (let i = 0; i < oppRemain; i++) {
+      opponentDiceRow.appendChild(createDie('', ''));
+    }
+  } else {
+    // 내 턴이 아니면 → 내 프사 옆에 내 남은 주사위 표시
+    for (let i = 0; i < myRemain; i++) {
+      myDiceRow.appendChild(createDie('', ''));
+    }
+  }
 }
 
 // 아바타 dataURL 읽기
@@ -156,6 +217,7 @@ enterGameBtn.addEventListener('click', async () => {
     return;
   }
   myProfile.name = nickname;
+  myProfile.color = colorSelect.value;
 
   if (!myProfile.avatar && avatarInput.files[0]) {
     myProfile.avatar = await readAvatarFile(avatarInput.files[0]);
@@ -181,6 +243,7 @@ function connectSocket() {
     socket.emit('registerProfile', {
       name: myProfile.name,
       avatar: myProfile.avatar,
+      color: myProfile.color,
     });
   });
 
@@ -230,6 +293,7 @@ function connectSocket() {
   socket.on('gameStarted', ({ round }) => {
     gameStarted = true;
     startGameBtn.disabled = true;
+    startGameBtn.classList.add('hidden'); // 🔹 시작 버튼 숨기기
     roundNumberSpan.textContent = String(round);
     addLog(`게임 시작! ROUND ${round}`);
   });
@@ -241,17 +305,28 @@ function connectSocket() {
   socket.on('turnChanged', ({ currentPlayerId, currentPlayerName }) => {
     currentTurnId = currentPlayerId;
     updateTurnUI(currentPlayerId, currentPlayerName);
+    updateRemainingDiceUI();
   });
 
   socket.on('gameState', (state) => {
-    // 돈/주사위 남은 개수 갱신용
-    state.players.forEach((p) => {
+    // 전체 상태 업데이트
+    if (state.round) {
+      roundNumberSpan.textContent = String(state.round);
+    }
+    players = state.players || players;
+    currentTurnId = state.currentTurnId || currentTurnId;
+
+    // 돈 갱신
+    players.forEach((p) => {
       if (p.id === myId) {
         myMoneySpan.textContent = (p.money ?? 0) + ' $';
       } else {
         opponentMoneySpan.textContent = (p.money ?? 0) + ' $';
       }
     });
+
+    updateCasinoDiceSummaries(state.casinos || []);
+    updateRemainingDiceUI();
   });
 
   socket.on('diceRolled', ({ rollerId, rollerName, dice }) => {
@@ -286,9 +361,6 @@ function connectSocket() {
       `${owner}가 ${casinoIndex}번 카지노에 색 주사위 ${colorCount}개, 중립 ${neutralCount}개를 배팅했습니다.`,
     );
     rolledDiceRow.innerHTML = '';
-    if (playerId === myId) {
-      myDiceRow.innerHTML = ''; // 나중에 원하면 누적 표시 가능
-    }
   });
 
   socket.on('payouts', (payouts) => {
@@ -299,10 +371,10 @@ function connectSocket() {
     });
   });
 
-  socket.on('gameOver', ({ players, winnerId, winnerName }) => {
+  socket.on('gameOver', ({ players: finalPlayers, winnerId, winnerName }) => {
     gameStarted = false;
     let msg = '게임 종료!\n';
-    players.forEach((p) => {
+    finalPlayers.forEach((p) => {
       msg += `${p.name}: ${p.money.toLocaleString()} $\n`;
     });
     if (winnerId) {
