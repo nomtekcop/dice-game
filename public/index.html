@@ -1,53 +1,328 @@
 <!DOCTYPE html>
 <html lang="ko">
-<head>
-  <meta charset="UTF-8" />
-  <title>2인용 주사위 게임</title>
-  <style>
-    body {
-      font-family: sans-serif;
-      max-width: 600px;
-      margin: 40px auto;
-      text-align: center;
-    }
-    #playerList {
-      margin: 10px 0;
-    }
-    #log {
-      margin-top: 20px;
-      text-align: left;
-      border: 1px solid #ccc;
-      padding: 10px;
-      height: 200px;
-      overflow-y: auto;
-      font-size: 14px;
-      background: #fafafa;
-    }
-    button {
-      padding: 10px 20px;
-      font-size: 16px;
-      cursor: pointer;
-      margin-top: 10px;
-    }
-  </style>
-</head>
-<body>
-  <h1>2인용 온라인 주사위 게임</h1>
+  <head>
+    <meta charset="UTF-8" />
+    <title>보드게임 - 온라인</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont,
+          'Segoe UI', sans-serif;
+        background: #f7f7f7;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+      }
+      .hidden {
+        display: none;
+      }
+      /* 프로필 설정 화면 */
+      #profile-screen {
+        width: 360px;
+        background: #ffffff;
+        border: 1px solid #ddd;
+        padding: 24px;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+      }
+      #profile-screen h1 {
+        font-size: 18px;
+        margin: 0 0 8px;
+      }
+      #profile-screen label {
+        font-size: 14px;
+        display: block;
+        margin-top: 16px;
+        margin-bottom: 8px;
+      }
+      #nickname-input {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        font-size: 14px;
+      }
+      .avatar-dropzone {
+        width: 100%;
+        aspect-ratio: 1 / 1;
+        border: 1px dashed #bbb;
+        border-radius: 8px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 14px;
+        color: #777;
+        cursor: pointer;
+        position: relative;
+        overflow: hidden;
+      }
+      .avatar-dropzone img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      #enter-game-btn {
+        margin-top: 20px;
+        width: 100%;
+        padding: 12px;
+        border-radius: 8px;
+        border: none;
+        background: #222;
+        color: #fff;
+        font-size: 15px;
+        cursor: pointer;
+      }
+      #enter-game-btn:disabled {
+        opacity: 0.6;
+        cursor: default;
+      }
 
-  <p id="myInfo">내 정보: 연결 중...</p>
-  <p id="turnInfo">현재 턴: -</p>
-  <p id="lastRoll">마지막 주사위: -</p>
+      /* 게임 화면 */
+      #game-screen {
+        width: 100%;
+        max-width: 1200px;
+        height: 90vh;
+        background: #ffffff;
+        border-radius: 16px;
+        border: 1px solid #ddd;
+        padding: 16px 24px 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
 
-  <button id="rollBtn" disabled>주사위 굴리기</button>
+      #round-header {
+        font-size: 24px;
+        font-weight: 700;
+        letter-spacing: 4px;
+      }
 
-  <h3>플레이어 목록</h3>
-  <div id="playerList"></div>
+      #top-player-area {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
 
-  <h3>기록</h3>
-  <div id="log"></div>
+      .player-panel {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
 
-  <!-- socket.io 클라이언트 스크립트 -->
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="client.js"></script>
-</body>
+      .avatar-circle {
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        border: 1px solid #ccc;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f5f5f5;
+      }
+      .avatar-circle img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .player-name {
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+      .player-money {
+        font-size: 14px;
+        color: #555;
+      }
+
+      #center-area {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+      }
+
+      #turn-indicator {
+        font-size: 16px;
+        margin-bottom: 4px;
+      }
+
+      #rolled-dice-row {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 8px;
+        min-height: 40px;
+      }
+
+      .die {
+        width: 32px;
+        height: 32px;
+        border-radius: 4px;
+        border: 1px solid #999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+      }
+      .die.mine {
+        border-color: #f97373;
+        background: #ffecec;
+      }
+      .die.opponent {
+        border-color: #60a5fa;
+        background: #e5f0ff;
+      }
+
+      #roll-btn {
+        padding: 8px 16px;
+        border-radius: 8px;
+        border: none;
+        background: #222;
+        color: #fff;
+        cursor: pointer;
+        font-size: 14px;
+      }
+      #roll-btn:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+
+      /* 카지노 6개 영역 */
+      #casino-row {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 8px;
+        flex: 1;
+      }
+      .casino {
+        border: 1px solid #ccc;
+        border-radius: 16px 16px 8px 8px;
+        padding: 8px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+      .casino-header {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 4px;
+      }
+      .casino-die {
+        width: 28px;
+        height: 28px;
+        border-radius: 4px;
+        border: 1px solid #999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        background: #fafafa;
+      }
+      .casino-money-list {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        align-items: flex-end;
+        font-size: 12px;
+      }
+      .casino-money {
+        padding: 2px 6px;
+        border-radius: 4px;
+        border: 1px solid #bbb;
+        background: #fdfdfd;
+      }
+
+      /* 내 정보 영역 */
+      #bottom-player-area {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 4px;
+      }
+
+      #my-dice-row {
+        display: flex;
+        gap: 4px;
+      }
+
+      #log-area {
+        font-size: 12px;
+        max-height: 90px;
+        overflow-y: auto;
+        border-top: 1px solid #eee;
+        padding-top: 4px;
+        color: #555;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- 프로필 설정 화면 -->
+    <div id="profile-screen">
+      <h1>닉네임</h1>
+      <input id="nickname-input" type="text" placeholder="닉네임을 입력하세요" />
+
+      <label>프로필 사진</label>
+      <div id="avatar-drop" class="avatar-dropzone">
+        <span id="avatar-drop-text">클릭해서 업로드</span>
+        <input
+          id="avatar-input"
+          type="file"
+          accept="image/*"
+          style="display: none"
+        />
+      </div>
+
+      <button id="enter-game-btn">게임 입장</button>
+    </div>
+
+    <!-- 게임 화면 -->
+    <div id="game-screen" class="hidden">
+      <div id="round-header">ROUND <span id="round-number">1</span></div>
+
+      <div id="top-player-area">
+        <div id="opponent-panel" class="player-panel">
+          <div class="avatar-circle">
+            <img id="opponent-avatar" alt="" />
+          </div>
+          <div>
+            <div id="opponent-name" class="player-name">상대 플레이어</div>
+            <div id="opponent-money" class="player-money">0 $</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="center-area">
+        <div id="turn-indicator">대기 중…</div>
+        <div id="rolled-dice-row"></div>
+        <button id="roll-btn" disabled>굴리기</button>
+      </div>
+
+      <div id="casino-row">
+        <!-- 6개 카지노 생성은 JS에서 -->
+      </div>
+
+      <div id="bottom-player-area">
+        <div class="player-panel">
+          <div>
+            <div id="my-name" class="player-name">나</div>
+            <div id="my-money" class="player-money">0 $</div>
+          </div>
+        </div>
+        <div class="avatar-circle">
+          <img id="my-avatar" alt="" />
+        </div>
+        <div id="my-dice-row"></div>
+      </div>
+
+      <div id="log-area"></div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="client.js"></script>
+  </body>
 </html>
