@@ -21,6 +21,7 @@
       .hidden {
         display: none;
       }
+
       /* 프로필 설정 화면 */
       #profile-screen {
         width: 360px;
@@ -40,7 +41,8 @@
         margin-top: 16px;
         margin-bottom: 8px;
       }
-      #nickname-input {
+      #nickname-input,
+      #color-select {
         width: 100%;
         padding: 10px 12px;
         border: 1px solid #ccc;
@@ -243,6 +245,11 @@
         font-size: 14px;
         background: #fafafa;
       }
+      .casino-dice-summary {
+        font-size: 11px;
+        min-height: 32px;
+        margin-bottom: 4px;
+      }
       .casino-money-list {
         display: flex;
         flex-direction: column;
@@ -265,9 +272,10 @@
         margin-top: 4px;
       }
 
-      #my-dice-row {
+      #my-dice-row,
+      #opponent-dice-row {
         display: flex;
-        gap: 4px;
+        gap: 2px;
       }
 
       #log-area {
@@ -297,6 +305,14 @@
         />
       </div>
 
+      <label>색깔 선택</label>
+      <select id="color-select">
+        <option value="red">빨강</option>
+        <option value="blue">파랑</option>
+        <option value="green">초록</option>
+        <option value="yellow">노랑</option>
+      </select>
+
       <button id="enter-game-btn">게임 입장</button>
     </div>
 
@@ -313,6 +329,7 @@
             <div id="opponent-name" class="player-name">상대 플레이어</div>
             <div id="opponent-money" class="player-money">0 $</div>
           </div>
+          <div id="opponent-dice-row"></div>
         </div>
       </div>
 
