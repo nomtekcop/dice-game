@@ -82,6 +82,7 @@ function getPlayersView() {
     id: p.id,
     name: p.name,
     avatar: p.avatar,
+    color: p.color,
     index: p.index,
     money: p.money,
     diceColorLeft: p.diceColorLeft ?? 0,
@@ -260,6 +261,7 @@ io.on('connection', (socket) => {
     id: socket.id,
     name: null,
     avatar: null,
+    color: null,
     index: playerIndex,
     money: 0,
     diceColorLeft: 0,
@@ -277,6 +279,7 @@ io.on('connection', (socket) => {
     const nameFromClient = data?.name ?? '';
     player.name = String(nameFromClient).trim() || `Player ${playerIndex}`;
     player.avatar = data?.avatar || null;
+    player.color = data?.color || null;
 
     socket.emit('playerInfo', {
       id: player.id,
