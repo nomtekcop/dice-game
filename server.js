@@ -1,3 +1,4 @@
+// server.js
 import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
@@ -6,104 +7,131 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// public 폴더를 정적 파일 제공용으로 사용
 app.use(express.static('public'));
 
-// 게임 상태(서버에서 관리)
-let players = [];      // [{ id: socket.id, name: 'Player 1' }, ...]
-let currentTurn = null; // socket.id 저장
-let lastRoll = null;    // 마지막 주사위 결과
+// 플레이어 상태
+// { id, name, avatar, index, money }
+let players = [];
+let currentTurn = null;
 
 io.on('connection', (socket) => {
   console.log('새 유저 접속:', socket.id);
 
-  // 이미 2명이 꽉 찼으면
+  // 2인까지만
   if (players.length >= 2) {
     socket.emit('roomFull');
     console.log('방이 가득 차서 거절:', socket.id);
     return;
   }
 
-  // 플레이어 추가
-  const playerNumber = players.length + 1;
-  const player = { id: socket.id, name: `Player ${playerNumber}` };
+  const playerIndex = players.length + 1;
+  const player = {
+    id: socket.id,
+    name: null,
+    avatar: null,
+    index: playerIndex,
+    money: 0,
+  };
   players.push(player);
 
-  console.log('플레이어 목록:', players);
-
-  // 이 유저에게 자신의 정보 보내기
-  socket.emit('playerInfo', {
-    id: socket.id,
-    name: player.name
+  // 클라이언트에게 "프로필 보내줘" 신호
+  socket.emit('awaitProfile', {
+    suggestedName: `Player ${playerIndex}`,
   });
 
-  // 모든 유저에게 현재 플레이어들 정보 보내기
-  io.emit('playerList', players);
+  // 프로필 등록
+  socket.on('registerProfile', (data) => {
+    if (!player) return;
 
-  // 두 명이 모두 들어왔으면, Player 1부터 시작
-  if (players.length === 2 && !currentTurn) {
-    currentTurn = players[0].id;
-    io.emit('turnChanged', {
-      currentPlayerId: currentTurn,
-      currentPlayerName: players[0].name
+    const nameFromClient = data?.name ?? '';
+    player.name =
+      String(nameFromClient).trim() || `Player ${playerIndex}`;
+    player.avatar = data?.avatar || null;
+
+    // 자기 정보 보내기
+    socket.emit('playerInfo', {
+      id: player.id,
+      name: player.name,
+      avatar: player.avatar,
+      index: player.index,
+      money: player.money,
     });
-  }
 
-  // 클라이언트가 "rollDice" 요청함
+    // 모두에게 플레이어 리스트 방송
+    broadcastPlayerList();
+
+    // 두 명 다 들어왔고, 아직 턴이 없으면 1번부터 시작
+    if (players.length === 2 && !currentTurn) {
+      currentTurn = players[0].id;
+      io.emit('turnChanged', {
+        currentPlayerId: currentTurn,
+        currentPlayerName: players[0].name,
+      });
+    }
+  });
+
+  // 주사위 굴리기 (아직은 그냥 1개짜리 간단 버전)
   socket.on('rollDice', () => {
-    // 아직 턴이 안 정해졌으면 무시
-    if (!currentTurn) return;
-
-    // 지금 턴이 아니면 무시
-    if (socket.id !== currentTurn) {
+    if (!currentTurn || socket.id !== currentTurn) {
       socket.emit('notYourTurn');
       return;
     }
 
-    // 1 ~ 6 사이 랜덤 주사위
-    const roll = Math.floor(Math.random() * 6) + 1;
-    lastRoll = roll;
+    const roller = players.find((p) => p.id === socket.id);
+    if (!roller) return;
 
-    // 다음 턴 플레이어 계산 (2명만 있다고 가정)
-    const currentIndex = players.findIndex(p => p.id === currentTurn);
+    const value = Math.floor(Math.random() * 6) + 1; // 1~6
+
+    const currentIndex = players.findIndex(
+      (p) => p.id === currentTurn,
+    );
     const nextIndex = (currentIndex + 1) % players.length;
     currentTurn = players[nextIndex].id;
-
-    const currentPlayer = players[currentIndex];
     const nextPlayer = players[nextIndex];
 
-    // 모든 유저에게 결과 방송
     io.emit('diceRolled', {
-      rollerId: socket.id,
-      rollerName: currentPlayer.name,
-      value: roll,
+      rollerId: roller.id,
+      rollerName: roller.name,
+      value,
       nextPlayerId: currentTurn,
-      nextPlayerName: nextPlayer.name
+      nextPlayerName: nextPlayer.name,
     });
   });
 
-  // 유저가 나갔을 때
   socket.on('disconnect', () => {
     console.log('유저 나감:', socket.id);
-    players = players.filter(p => p.id !== socket.id);
+    const wasTurn = socket.id === currentTurn;
 
-    // 나간 애가 턴이었으면 턴 초기화 또는 남은 사람에게 넘기기
-    if (socket.id === currentTurn) {
+    players = players.filter((p) => p.id !== socket.id);
+
+    if (wasTurn) {
       if (players.length >= 1) {
         currentTurn = players[0].id;
         io.emit('turnChanged', {
           currentPlayerId: currentTurn,
-          currentPlayerName: players[0].name
+          currentPlayerName: players[0].name,
         });
       } else {
         currentTurn = null;
       }
     }
 
-    // 플레이어 목록 갱신 브로드캐스트
-    io.emit('playerList', players);
+    broadcastPlayerList();
   });
 });
+
+function broadcastPlayerList() {
+  io.emit(
+    'playerList',
+    players.map((p) => ({
+      id: p.id,
+      name: p.name,
+      avatar: p.avatar,
+      index: p.index,
+      money: p.money,
+    })),
+  );
+}
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
